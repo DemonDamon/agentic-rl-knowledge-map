@@ -68,3 +68,43 @@ $$\nabla J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta} \left[ \sum_{t=0}^{T} \na
 4. Wen, X., Liu, Z., Zheng, S., et al. (2025). *Reinforcement Learning with Verifiable Rewards Implicitly Incentivizes Correct Reasoning in Base LLMs*. arXiv:2506.14245.
 5. Cai, X. Q. (2025). *Reinforcement Learning with Verifiable yet Noisy Rewards*. arXiv:2510.00915.
 6. Unlocking exploration in rlvr: Uncertainty-aware advantage shaping for deeper reasoning. arXiv:2510.10649.
+
+## 4. 低方差奖励的数学优势：策略梯度方差分析
+
+RLVR 的核心优势之一在于其**低方差**和**有界性**的奖励信号，这在数学上显著降低了策略梯度估计的方差，从而提高了训练的**数值稳定性**和**收敛速度**。
+
+### 4.1 策略梯度估计的方差
+
+策略梯度方法（如 REINFORCE）使用单条轨迹 $\tau$ 上的样本来估计梯度 $\hat{g}$：
+$$\hat{g} = \left( \sum_{t=0}^{T} \nabla \log \pi_\theta(a_t|s_t) \right) G(\tau)$$
+
+其中 $G(\tau)$ 是总回报。估计量 $\hat{g}$ 的方差 $\text{Var}[\hat{g}]$ 是衡量训练稳定性的关键指标。
+
+为了简化分析，我们考虑一个单步 MDP，此时 $\hat{g} = \nabla \log \pi_\theta(a|s) R(s, a)$。我们关注 $\hat{g}$ 的二阶矩 $\mathbb{E}[\hat{g}^2]$，因为 $\text{Var}[\hat{g}] = \mathbb{E}[\hat{g}^2] - (\mathbb{E}[\hat{g}])^2$。
+
+$$\mathbb{E}[\hat{g}^2] = \mathbb{E}_{s \sim \rho^\pi, a \sim \pi_\theta} \left[ (\nabla \log \pi_\theta(a|s))^2 R(s, a)^2 \right]$$
+
+### 4.2 奖励方差与策略梯度方差的关系
+
+我们观察到 $\mathbb{E}[\hat{g}^2]$ 与奖励的平方 $R(s, a)^2$ 直接相关。奖励的方差 $\text{Var}[R]$ 越大，其二阶矩 $\mathbb{E}[R^2]$ 往往越大，从而导致 $\mathbb{E}[\hat{g}^2]$ 增大，最终增大策略梯度估计的方差 $\text{Var}[\hat{g}]$。
+
+**RLVR 的优势在于其奖励 $R_{RLVR}$ 具有天然的有界性：**
+
+1. **RLVR 奖励**：$R_{RLVR} \in \{0, 1\}$（二元奖励）。
+   - 奖励的二阶矩 $M_2 = \mathbb{E}[R_{RLVR}^2] = 1^2 \cdot P(R=1) + 0^2 \cdot P(R=0) = P(R=1) \le 1$。
+   - **结论**：RLVR 的奖励二阶矩 $M_2$ 被严格限制在 $[0, 1]$ 范围内。
+
+2. **RLHF 奖励**：$R_{RLHF}$ 是奖励模型输出的连续值，通常没有严格的上限，可以非常大。
+   - 奖励的二阶矩 $M_2 = \mathbb{E}[R_{RLHF}^2] = \text{Var}[R_{RLHF}] + (\mathbb{E}[R_{RLHF}])^2$。
+   - 由于奖励模型的不确定性和人类偏好的主观性，$\text{Var}[R_{RLHF}]$ 往往很大，导致 $M_2$ 远大于 1，从而**显著增大了策略梯度估计的方差**。
+
+**数学结论**：
+RLVR 的可验证奖励通过将奖励限制在 $\{0, 1\}$ 集合中，有效地将 $\mathbb{E}[R^2]$ 限制在一个极小的范围内，从而**从根本上降低了策略梯度估计的方差**。
+
+$$\text{Var}[\hat{g}] \propto \mathbb{E}[R^2] \downarrow \implies \text{Var}[\hat{g}] \downarrow$$
+
+### 4.3 实际意义
+
+- **数值稳定性**：方差减小，避免了训练过程中的剧烈震荡和梯度爆炸。
+- **收敛速度**：方差更小的梯度估计能够更快地收敛到最优策略。
+- **样本效率**：在相同的训练效果下，RLVR 可以使用更小的批量大小或更少的环境交互次数。
